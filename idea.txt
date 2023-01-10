@@ -1,0 +1,81 @@
+the idea is to make a simple way to have a function
+be running clones on multiple threads.
+
+e.g. if i have a function that is used for load testing
+a network, I want it to run on all available threads,
+so that it can fully utilize the cpu.
+
+all of the below examples correlate with eachother.
+
+constructor example:
+    conccopy<int> coconuts(coconut);
+this will make a conccopy object named coconuts,
+which is assigned the function "coconut", and coconut
+is a function that takes a single int argument.
+Note: functions passed into a conccopy object do not
+return values.
+
+adding work:
+    coconuts << num;
+this will add some variable "num" to the internal
+work queue of coconuts. "num" will allow the funcion
+specified by its constructor to use "num" as an argument.
+"num" must be of the same type specified in its constructor.
+Note: "num" is simply added to an argument queue, any time
+a copy of its "function" is finished, it will check the
+argument queue, and use the first available argument
+as an argument. each inserted argument will available for
+execution by one function copy. if you want multiple copies
+to execute the same argument, you must insert multiple
+arguments.
+
+setting the max number of copies which can independently
+run:
+    coconuts.max_copies(2);
+this will set it so that coconuts can have at most
+2 independently executing copies of its function.
+
+========== implementation ==========
+
+the conccopy object will contain two
+queues. each queue will have an associated
+mutex. if an accessor wants to access either queue
+then the accessor must lock the mutex for the queue.
+an accessor must keep the mutex locked while accessing
+the queue, and must unlock the mutex once they have
+finished accessing.
+
+one queue will contain work, the other queue will contain
+workers. the work queue will simply contain arguments
+to be used by the assigned function, which workers will
+perform, then look for work, then either sleep or perform again.
+
+the life of the object:
+get constructed
+get the max_copies function called which, ->
+    make a mutex, lock the mutex, add the mutex to the worker queue,
+    generate an unnamed thread, which takes the thread loop function 
+    as an argument, and the generated mutex as an argument. 
+    do this for each generated thread.
+...
+life of a thread:
+    beginning immediately after starting:
+    the thread will start the thread loop function, and will be given a
+    mutex. [2]The thread will try to lock the mutex, which will be externally
+    locked, which results in it being blocked.
+
+append() behavior upon first call:
+    append will acquire a mutex on the work queue, it will append work to the queue,
+    it will then acquire a mutex on the worker queue, it will check if there
+    are any workers available, IF a worker is available,
+    it will then unlock a workers mutex, then immediately lock it again, then it will
+    unlock the work queue, then it will unlock the worker queue.
+
+life of a thread:
+immediately after acquiring lock, and there is work:
+the thread will immediately unlock the lock, [1]then lock the work queue,
+IF there is no work, it will lock the worker queue, add itself to the worker queue,
+then unlock the work queue, then unlock the worker queue, then go back to position [2]
+ELSE will grab work, then unlock the work queue. it will do work, when
+it is finished with work, it will go to position [1].
+
