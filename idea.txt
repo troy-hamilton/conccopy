@@ -38,12 +38,14 @@ this will set it so that coconuts can have at most
 ========== implementation ==========
 
 the conccopy object will contain two
-queues. each queue will have an associated
+queues, and a vector. each queue will have an associated
 mutex. if an accessor wants to access either queue
 then the accessor must lock the mutex for the queue.
 an accessor must keep the mutex locked while accessing
 the queue, and must unlock the mutex once they have
-finished accessing.
+finished accessing. the vector will contain the mutexes
+for threads, and the worker queue will contain the index position
+of a workers' mutex.
 
 one queue will contain work, the other queue will contain
 workers. the work queue will simply contain arguments
@@ -72,7 +74,6 @@ append() behavior upon first call:
     unlock the work queue, then it will unlock the worker queue.
 
 life of a thread:
-immediately after acquiring lock, and there is work:
 the thread will immediately unlock the lock, [1]then lock the work queue,
 IF there is no work, it will lock the worker queue, add itself to the worker queue,
 then unlock the work queue, then unlock the worker queue, then go back to position [2]
