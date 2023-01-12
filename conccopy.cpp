@@ -1,4 +1,4 @@
-// clear && g++ -std=c++20 -Wall bench.cpp && ./a.exe
+// clear && g++ -std=c++20 -Wall conccopy.cpp && ./a.exe
 #include <mutex>
 #include <thread>
 #include <span>
@@ -18,7 +18,7 @@ class conccopy
         
         void max_copies(const int);
         
-        void append_work(const T);
+        void append_work(T);
         
     private:
     
@@ -29,9 +29,14 @@ class conccopy
     // here as a simple "view" api into the above
     std::span<std::mutex, std::dynamic_extent> thread_mutexes;
     
+    // this is to prevent the threads from being de-scoped
+    std::shared_ptr<std::thread[]> thread_tape_start;
+    // this allows for a simple view api into the above
+    std::span<std::thread, std::dynamic_extent> thread_house;
+    
     // this function with a wierd name is the function that
     // threads will run
-    static void conccopy_thread_shell(std::mutex &, int); // this function is a nightmare
+    void thread_shell(int id);
     
     // where work will be appended
     std::queue<T> argument_queue;
@@ -45,7 +50,6 @@ class conccopy
     std::queue<int> sleeper_indexes;
     // a mutex on the above. accessors must lock this mutex first
     std::mutex sleeper_indexes_mutex;
-    
 };
 
 //constructor
@@ -58,31 +62,51 @@ conccopy<T>::conccopy(std::function<void(T)> &&func)
 template<typename T>
 void conccopy<T>::max_copies(const int num)
 {   
-    //sets up an array of mutexes for future use
+    // sets up an array of mutexes for future use
     mutex_tape_start.reset(new std::mutex[num]);
     
-    //sets a span of the above mutexes to allow for an easier manipulation api
+    // sets a span of the above mutexes to allow for an easier manipulation api
     std::span<std::mutex, std::dynamic_extent> sequence_of_mutexes(mutex_tape_start.get(), num);
     thread_mutexes = sequence_of_mutexes;
     
-    //locks all above mutexes
+    // locks all above mutexes
     for(std::mutex &i : thread_mutexes)
         i.lock();
     
-    //make an array of threads
-    //append an id to the worker queue
-    //make threads running loop function with their id# and mutex
+    // sets an array of threads for future use
+    thread_tape_start.reset(new std::thread[num]);
+    
+    // sets a span on the above threads for an easier api
+    std::span<std::thread, std::dynamic_extent> sequence_of_threads(thread_tape_start.get(), num);
+    thread_house = sequence_of_threads;
+    
+    // makes an int thread id (which represents the index positon of their mutex)
+    // and adds it to the sleeper queue
+    // and activates new threads
+    for(int i = 0; i < num; i++)
+    {
+        sleeper_indexes.push(i);
+        thread_house[i] = std::thread(thread_shell, this, i);
+    }
 }
 
 template<typename T>
-void conccopy<T>::conccopy_thread_shell(std::mutex &wall, int id)
+void conccopy<T>::thread_shell(int id)
 {
-    // pos1
-    wall.lock();
-    wall.unlock();
+    pos1:
+    thread_mutexes[id].lock();
+    thread_mutexes[id].unlock();
     // pos2
-    // lock the work queue
-    // check for work
+    argument_queue_mutex.lock(); // lock the work queue
+    if(argument_queue.empty() == true) // check for work
+    { // if no work
+        sleeper_indexes_mutex.lock(); // lock the worker queue
+        sleeper_indexes.push(id); // add self id to worker queue
+        argument_queue_mutex.unlock(); // unlock work queue
+        sleeper_indexes_mutex.unlock(); // unlock the worker queue
+        goto pos1;// go back to pos1
+    }
+    
     /* if no work
         lock the worker queue
         add self id to worker queue
@@ -96,10 +120,34 @@ void conccopy<T>::conccopy_thread_shell(std::mutex &wall, int id)
     // go to pos2
 }
 
-void some_func(int){std::cout << 'a' << std::endl;} // used for testing
+template<typename T>
+void conccopy<T>::append_work(T)
+{
+    //acquire lock on work queue mutex
+    //add work to work queue
+    //acquire lock on worker queue mutex
+    //check if there are any workers available
+    /*
+        if there are no workers available,
+        unlock the worker queue mutex
+        unlock the work queue mutex
+        return
+    */
+    //grab a workers' id from the worker queue
+    //unlock the mutex at thread_mutexes[id]
+    //lock the mutex at thread_mutexes[id]
+    //unlock the work queue mutex
+    //unlock the worker queue mutex
+    
+}
+
+void example_func(int n)
+{
+}
+
 int main()
 {
-    conccopy<int> coconut(some_func);
+    conccopy<int> splitter(example_func);
     
-    coconut.max_copies(11);
+    splitter.max_copies(2);
 }
