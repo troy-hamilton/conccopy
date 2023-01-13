@@ -1,3 +1,4 @@
+// clear && g++ -std=c++20 -fmodules-ts -Wall conccopy.hpp
 #include <mutex>
 #include <thread>
 #include <span>
